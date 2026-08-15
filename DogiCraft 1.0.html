@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DogiOS DarkCraft Legacy Mega</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            background-color: #87CEEB; /* Sky blue background */
+            font-family: monospace;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+        }
+        
+        /* Modernized Dynamic Blending Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 14px;
+            height: 14px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            user-select: none;
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            mix-blend-mode: difference; /* Inverts color over light/dark surfaces */
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            pointer-events: none;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        /* Currency Indicator Display */
+        #currency-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.75);
+            color: #00ff88;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            border: 1px solid #00ff88;
+            z-index: 10;
+        }
+        
+        #click-prompt {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            border: 2px solid #00ff00;
+            z-index: 10;
+        }
+
+        /* Hotbar CSS Layout */
+        #hotbar-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px;
+            border-radius: 6px;
+            pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .hotbar-slot {
+            width: 48px;
+            height: 48px;
+            background: rgba(50, 50, 50, 0.8);
+            border: 3px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            cursor: pointer;
+            border-radius: 4px;
+            color: white;
+        }
+        .hotbar-slot.active {
+            border-color: #00ff00;
+            background: rgba(100, 100, 100, 0.8);
+        }
+
+        /* Interface Wrapper */
+        #menu-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            gap: 20px;
+            z-index: 100;
+        }
+
+
+        /* Inventory Interface Overlay */
+        #inventory-menu {
+            background: rgba(20, 20, 20, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            color: white;
+            width: 320px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.7);
+            border: 2px solid #444;
+        }
+        #inventory-menu h3 {
+            margin-top: 0;
+            color: #00ff00;
+        }
+        #search-box {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+            font-family: monospace;
+        }
+        #item-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+        .grid-item {
+            background: #2a2a2a;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 14px;
+        }
+        .grid-item:hover {
+            background: #00ff00;
+            color: black;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="crosshair"></div>
+
+    
+    <div id="currency-display">
+        🟩 Emeralds: <span id="balance-amount">150</span>
+    </div>
+
+    <div id="click-prompt" style="display: block;">
+        <h2>🎮 DogiOS DarkCraft</h2>
+        <p>Click here to lock mouse &amp; capture controls</p>
+    </div>
+
+    <div id="ui-overlay">
+        <strong>CONTROLS:</strong><br>
+        • W, A, S, D - Move horizontally<br>
+        • Space - Jump<br>
+        • E - Toggle Inventory Menu<br>
+        • 1, 2, 3, 4 - Hotbar Slots<br>
+        • Left Click - Break Block (+1 Emerald)<br>
+        • Right Click - Place / Interact (Door/Table)
+    </div>
+
+    <div id="hotbar-container">
+        <div class="hotbar-slot active" data-block="grass">🟩</div>
+        <div class="hotbar-slot" data-block="dirt">🟫</div>
+        <div class="hotbar-slot" data-block="stone">🪨</div>
+        <div class="hotbar-slot" data-block="door">🚪</div>
+        <div class="hotbar-slot" data-block="crafting_table">🛠️</div>
+        <div class="hotbar-slot" data-block="empty"> </div>
+        <div class="hotbar-slot" data-block="empty"> </div>
+        <div class="hotbar-slot" data-block="empty"> </div>
+        <div class="hotbar-slot" data-block="empty"> </div>
+        <div class="hotbar-slot" data-block="empty"> </div>
+        <div class="hotbar-slot" data-block="empty"> </div>
+    </div>
+
+    <div id="menu-container" style="display: none;">
+        <div id="inventory-menu">
+            <h3>🎒 Block Inventory</h3>
+            <input type="text" id="search-box" placeholder="Type to search blocks...">
+            <div id="item-grid">
+                <div class="grid-item" data-block="grass">Grass (🟩)</div>
+                <div class="grid-item" data-block="dirt">Dirt (🟫)</div>
+                <div class="grid-item" data-block="stone">Stone (🪨)</div>
+                <div class="grid-item" data-block="wood">Wood (🪵)</div>
+                <div class="grid-item" data-block="sand">Sand (🟨)</div>
+                <div class="grid-item" data-block="glass">Glass (🔲)</div>
+                <div class="grid-item" data-block="crafting table">Crafting Table (🛠️)</div>
+                <div class="grid-item" data-block="door">Wooden Door (🚪)</div>
+                <div class="grid-item" data-block="obsidian">Obsidian (🔮)</div>
+                <div class="grid-item" data-block="glowstone">Glowstone (💡)</div>
+                <div class="grid-item" data-block="magma">Magma (🔥)</div>
+                <div class="grid-item" data-block="iron">Iron (⚙️)</div>
+                <div class="grid-item" data-block="water">Water (💧)</div>
+                <div class="grid-item" data-block="lava">Lava (🌋)</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// --- 1. SETUP ENGINE CHANNELS ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.FogExp2(0x87CEEB, 0.05);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// --- Create Crafting UI Dynamically ---
+const craftingUI = document.createElement('div');
+craftingUI.id = 'crafting-menu';
+craftingUI.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(30, 20, 10, 0.95);
+    padding: 20px;
+    border-radius: 12px;
+    color: white;
+    width: 280px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    border: 3px solid #654321;
+    display: none;
+    z-index: 101;
+    font-family: monospace;
+    text-align: center;
+`;
+craftingUI.innerHTML = `
+    <h3 style="color: #ffaa00; margin-top: 0;">🛠️ Crafting Table</h3>
+    <p style="font-size: 12px;">Select a recipe to craft:</p>
+    <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+        <div style="background: #3e2723; padding: 10px; border: 1px solid #5d4037; border-radius: 4px; cursor: pointer;" onclick="alert('Crafted 4x Wood Planks!')">🪵 1x Log ➔ 4x Planks</div>
+        <div style="background: #3e2723; padding: 10px; border: 1px solid #5d4037; border-radius: 4px; cursor: pointer;" onclick="alert('Crafted 1x Stone Pickaxe!')">⛏️ Stone Pickaxe</div>
+    </div>
+    <button style="margin-top: 15px; background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;" onclick="closeCrafting()">Close</button>
+`;
+document.body.appendChild(craftingUI);
+
+window.closeCrafting = function() {
+    craftingUI.style.display = 'none';
+    isCraftingOpen = false;
+    document.body.requestPointerLock();
+};
+
+// --- 2. LIGHTING CONFIGURATIONS ---
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+directionalLight.position.set(20, 40, 20);
+directionalLight.castShadow = true;
+scene.add(directionalLight);
+
+// --- 3. GAME ENVIRONMENT VARIABLES ---
+const blockSize = 1;
+const chunkSize = 16; 
+const drawDistance = 2; 
+const objects = []; 
+const loadedChunks = {}; 
+
+
+const materials = {
+    grass: new THREE.MeshLambertMaterial({ color: 0x4caf50 }),
+    dirt: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
+    stone: new THREE.MeshLambertMaterial({ color: 0x808080 }),
+    wood: new THREE.MeshLambertMaterial({ color: 0x5c4033 }),
+    sand: new THREE.MeshLambertMaterial({ color: 0xecd9b0 }),
+    water: new THREE.MeshLambertMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.7 }),
+    lava: new THREE.MeshLambertMaterial({ color: 0xff4500, transparent: true, opacity: 0.8 }),
+    glass: new THREE.MeshLambertMaterial({ color: 0xadd8e6, transparent: true, opacity: 0.5 }),
+    crafting_table: new THREE.MeshLambertMaterial({ color: 0xba8b02 }),
+    door: new THREE.MeshLambertMaterial({ color: 0x966F33 }),
+    obsidian: new THREE.MeshLambertMaterial({ color: 0x241433 }),
+    glowstone: new THREE.MeshLambertMaterial({ color: 0xffe066, emissive: 0x443300 }),
+    magma: new THREE.MeshLambertMaterial({ color: 0xcc3300 }),
+    obsidian: new THREE.MeshLambertMaterial({ color: 0x241433 }),
+    iron: new THREE.MeshLambertMaterial({ color: 0xd8d8d8 }),
+    water: new THREE.MeshLambertMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.7 }),
+    lava: new THREE.MeshLambertMaterial({ color: 0xff4500, transparent: true, opacity: 0.8 }),
+};
+const blockGeometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+
+let currentMaterialKey = 'grass'; 
+
+
+// --- 4. PHYSICS CONFIGURATION ---
+const playerPhysics = {
+    height: 1.8,
+    radius: 0.3,
+    velocity: new THREE.Vector3(),
+    onGround: false,
+    gravity: -22.0,
+    jumpForce: 8.0
+};
+
+function checkCollision(position) {
+    const pMinX = position.x - playerPhysics.radius;
+    const pMaxX = position.x + playerPhysics.radius;
+    const pMinY = position.y - playerPhysics.height;
+    const pMaxY = position.y;
+    const pMinZ = position.z - playerPhysics.radius;
+    const pMaxZ = position.z + playerPhysics.radius;
+
+    const blockBox = new THREE.Box3();
+
+    for (let i = 0; i < objects.length; i++) {
+        const block = objects[i];
+        blockBox.setFromObject(block);
+
+        if (pMaxX > blockBox.min.x && pMinX < blockBox.max.x &&
+            pMaxY > blockBox.min.y && pMinY < blockBox.max.y &&
+            pMaxZ > blockBox.min.z && pMinZ < blockBox.max.z) {
+            return true; 
+        }
+    }
+    return false;
+}
+
+// --- 5. PROCEDURAL INFINITE CHUNK SYSTEM ---
+function generateChunk(chunkX, chunkZ) {
+    const chunkKey = `${chunkX},${chunkZ}`;
+    const startX = chunkX * chunkSize;
+    const startZ = chunkZ * chunkSize;
+
+    // IF A SAVE EXISTS: Rebuild the chunk from our saved block array
+    if (loadedChunks[chunkKey] && Array.isArray(loadedChunks[chunkKey])) {
+        console.log(`Loading saved blocks for chunk: ${chunkKey}`);
+        loadedChunks[chunkKey].forEach(bData => {
+            const material = materials[bData.materialType] || materials.dirt;
+            
+            let block;
+            if (bData.materialType === 'door') {
+                block = createDoorInstance();
+                block.position.set(bData.x - 0.5, bData.y - 0.5, bData.z - 0.5);
+            } else {
+                block = new THREE.Mesh(blockGeometry, material);
+                block.position.set(bData.x, bData.y, bData.z);
+                block.castShadow = true;
+                block.receiveShadow = true;
+                block.name = bData.materialType;
+            }
+            
+            scene.add(block);
+            objects.push(block);
+        });
+        return; // Stop here! Don't generate procedural map terrain.
+    }
+
+    // IF NO SAVE EXISTS: Run procedural math and store the data structure
+    console.log(`Generating fresh procedural chunk: ${chunkKey}`);
+    const blockArray = [];
+
+    for (let x = startX; x < startX + chunkSize; x++) {
+        for (let z = startZ; z < startZ + chunkSize; z++) {
+            const height = Math.floor(Math.sin(x * 0.15) * 2 + Math.cos(z * 0.15) * 2) + 4;
+            
+            for (let y = 0; y <= height; y++) {
+                let materialType = 'dirt';
+                let material = materials.dirt;
+                if (y === height) { material = materials.grass; materialType = 'grass'; }
+                if (y < height - 2) { material = materials.stone; materialType = 'stone'; }
+
+                const block = new THREE.Mesh(blockGeometry, material);
+                block.position.set(x, y, z);
+                block.castShadow = true;
+                block.receiveShadow = true;
+                block.name = "terrain";
+                
+                scene.add(block);
+                objects.push(block);
+
+                // Add to our persistent array
+                blockArray.push({ x: x, y: y, z: z, materialType: materialType });
+            }
+        }
+    }
+    // Set our array to the global object map
+    loadedChunks[chunkKey] = blockArray;
+}
+
+function updateChunks() {
+    const currentChunkX = Math.floor(camera.position.x / chunkSize);
+    const currentChunkZ = Math.floor(camera.position.z / chunkSize);
+
+    for (let x = currentChunkX - drawDistance; x <= currentChunkX + drawDistance; x++) {
+        for (let z = currentChunkZ - drawDistance; z <= currentChunkZ + drawDistance; z++) {
+            const chunkKey = `${x},${z}`;
+            // If the chunk doesn't exist in memory AT ALL, build it fresh
+            if (!loadedChunks[chunkKey]) {
+                generateChunk(x, z);
+            } 
+            // If it DOES exist as a saved data array but isn't rendered in the visual scene yet, spawn its blocks!
+            else if (Array.isArray(loadedChunks[chunkKey]) && !objects.some(obj => {
+                const cx = Math.floor(obj.position.x / chunkSize);
+                const cz = Math.floor(obj.position.z / chunkSize);
+                return cx === x && cz === z;
+            })) {
+                generateChunk(x, z);
+            }
+        }
+    }
+}
+
+camera.position.set(8, 10, 8);
+updateChunks();
+
+// --- 6. THIRD PERSON CHARACTER DESIGN GROUP MESH ---
+function createPlayerMesh() {
+    const playerGroup = new THREE.Group();
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+    const shirtMat = new THREE.MeshLambertMaterial({ color: 0x00a8ff });
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skinMat);
+    head.position.y = 0.5;
+    playerGroup.add(head);
+
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.25), shirtMat);
+    torso.position.y = 0.0;
+    playerGroup.add(torso);
+
+    scene.add(playerGroup);
+    return playerGroup;
+}
+const playerCharacter = createPlayerMesh();
+
+// --- 6.5 DOOR INSTANTIATOR FUNCTION ---
+function createDoorInstance() {
+    const doorPivot = new THREE.Group();
+    const panelGeom = new THREE.BoxGeometry(0.95, 2.0, 0.14);
+    const panelMesh = new THREE.Mesh(panelGeom, materials.door);
+    
+    panelMesh.position.set(0.475, 1.0, 0);
+    panelMesh.castShadow = true;
+    panelMesh.receiveShadow = true;
+    doorPivot.add(panelMesh);
+
+    const knobGeom = new THREE.SphereGeometry(0.05, 8, 8);
+    const knobMat = new THREE.MeshLambertMaterial({ color: 0xd4af37 });
+    const knob = new THREE.Mesh(knobGeom, knobMat);
+    knob.position.set(0.8, 1.0, 0.09);
+    doorPivot.add(knob);
+
+    doorPivot.name = "door";
+    doorPivot.userData = { isOpen: false, baseRotationY: 0 };
+    
+    return doorPivot;
+}
+
+// --- 7. INTERACTIVE MOTION AND SYSTEMS INPUT CONTROL ---
+let keys = {};
+const moveSpeed = 5.0; 
+let pitch = 0;
+let yaw = 0;
+let isInventoryOpen = false;
+let isCraftingOpen = false;
+let clock = new THREE.Clock();
+
+document.addEventListener('keydown', (e) => { 
+    if ((isInventoryOpen || isCraftingOpen) && e.key.toLowerCase() !== 'e') return; 
+    keys[e.key.toLowerCase()] = true;
+});
+document.addEventListener('keyup', (e) => { 
+    keys[e.key.toLowerCase()] = false;
+});
+
+const prompt = document.getElementById('click-prompt');
+prompt.addEventListener('click', () => {
+    document.body.requestPointerLock();
+});
+
+document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement === document.body) {
+        prompt.style.display = 'none';
+        document.getElementById('menu-container').style.display = 'none';
+        craftingUI.style.display = 'none';
+        isInventoryOpen = false;
+        isCraftingOpen = false;
+    } else if (!isInventoryOpen && !isCraftingOpen) {
+        prompt.style.display = 'block';
+    }
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement !== document.body) return;
+
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+
+    const amCamDirection = new THREE.Quaternion();
+    amCamDirection.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+    camera.quaternion.copy(amCamDirection);
+});
+
+// --- 8. HOTBAR & INVENTORY CONNECTIONS ---
+const slots = document.querySelectorAll('.hotbar-slot');
+function selectSlot(index) {
+    slots.forEach(slot => slot.classList.remove('active'));
+    slots[index].classList.add('active');
+    currentMaterialKey = slots[index].getAttribute('data-block');
+}
+
+slots.forEach((slot, idx) => {
+    slot.addEventListener('click', () => selectSlot(idx));
+});
+
+function bindInventoryGridClicks() {
+    document.querySelectorAll('.grid-item').forEach(item => {
+        item.replaceWith(item.cloneNode(true));
+    });
+
+    document.querySelectorAll('.grid-item').forEach(item => {
+        item.addEventListener('click', () => {
+            let targetBlock = item.getAttribute('data-block');
+            if (targetBlock === 'crafting table') targetBlock = 'crafting_table';
+            
+            const activeSlot = document.querySelector('.hotbar-slot.active');
+            activeSlot.setAttribute('data-block', targetBlock);
+            
+            const emojis = { 
+                grass: '🟩', dirt: '🟫', stone: '🪨', wood: '🪵', sand: '🟨', 
+                water: '🟦', lava: '🌋', glass: '🔲', crafting_table: '🛠️', door: '🚪',
+                obsidian: '🔮', glowstone: '💡', magma: '🔥', iron: '⚙️'
+            };
+            activeSlot.textContent = emojis[targetBlock] || '📦';
+            currentMaterialKey = targetBlock;
+
+            document.body.requestPointerLock();
+        });
+    });
+}
+bindInventoryGridClicks();
+
+document.addEventListener('keydown', (e) => {
+    if (e.key >= '1' && e.key <= '4') {
+        selectSlot(parseInt(e.key) - 1);
+    }
+    if (e.key.toLowerCase() === 'e') {
+        if (isCraftingOpen) {
+            window.closeCrafting();
+            return;
+        }
+        const container = document.getElementById('menu-container');
+        if (!isInventoryOpen) {
+            container.style.display = 'flex';
+            isInventoryOpen = true;
+            document.exitPointerLock();
+        } else {
+            container.style.display = 'none';
+            isInventoryOpen = false;
+            document.body.requestPointerLock();
+        }
+        keys = {}; 
+    }
+});
+
+document.getElementById('search-box').addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase();
+    document.querySelectorAll('.grid-item').forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(query) ? 'block' : 'none';
+    });
+});
+
+// --- 9. EDITING TERRAIN (RAYCASTING UPDATES) ---
+const raycaster = new THREE.Raycaster();
+const mouseCenter = new THREE.Vector2(0, 0);
+
+document.addEventListener('mousedown', (e) => {
+    if (document.pointerLockElement !== document.body) return;
+
+    raycaster.setFromCamera(mouseCenter, camera);
+    const intersects = raycaster.intersectObjects(objects, true);
+
+    if (intersects.length > 0) {
+        const hit = intersects[0];
+        
+        let hitDoorObject = null;
+        let checkObj = hit.object;
+        while (checkObj && checkObj !== scene) {
+            if (checkObj.name === "door") {
+                hitDoorObject = checkObj;
+                break;
+            }
+            checkObj = checkObj.parent;
+        }
+
+        if (e.button === 0) { // BREAK METHOD
+            let targetObj = hitDoorObject ? hitDoorObject : hit.object;
+            const targetPos = targetObj.position.clone();
+            
+            // Remove from 3D window environment
+            scene.remove(targetObj);
+            const index = objects.indexOf(targetObj);
+            if (index > -1) objects.splice(index, 1);
+            
+            // Remove from our persistent memory array
+            const bx = Math.round(targetPos.x);
+            const bz = Math.round(targetPos.z);
+            const cx = Math.floor(bx / chunkSize);
+            const cz = Math.floor(bz / chunkSize);
+            const chunkKey = `${cx},${cz}`;
+            
+            if (loadedChunks[chunkKey] && Array.isArray(loadedChunks[chunkKey])) {
+                loadedChunks[chunkKey] = loadedChunks[chunkKey].filter(b => 
+                    !(Math.round(b.x) === bx && Math.round(b.y) === Math.round(targetPos.y) && Math.round(b.z) === bz)
+                );
+            }
+
+            playerEmeralds += 1;
+            document.getElementById('balance-amount').textContent = playerEmeralds;
+        }
+        } 
+        else if (e.button === 2) { // INTERACT OR PLACE METHOD
+            if (hitDoorObject) {
+                hitDoorObject.userData.isOpen = !hitDoorObject.userData.isOpen;
+                const targetAngle = hitDoorObject.userData.isOpen ? Math.PI / 2 : 0;
+                hitDoorObject.rotation.y = hitDoorObject.userData.baseRotationY + targetAngle;
+                return;
+            }
+
+            if (hit.object.name === "crafting_table") {
+                isCraftingOpen = true;
+                craftingUI.style.display = 'block';
+                document.exitPointerLock();
+                return;
+            }
+
+            const positionNormal = hit.face.normal;
+            const spawnPos = hit.object.position.clone().add(positionNormal);
+            
+            // Calculate which data chunk key it belongs to
+            const cx = Math.floor(Math.round(spawnPos.x) / chunkSize);
+            const cz = Math.floor(Math.round(spawnPos.z) / chunkSize);
+            const chunkKey = `${cx},${cz}`;
+
+            if (!loadedChunks[chunkKey]) loadedChunks[chunkKey] = [];
+
+            if (currentMaterialKey === 'door') {
+                const door = createDoorInstance();
+                door.position.set(spawnPos.x - 0.5, spawnPos.y - 0.5, spawnPos.z - 0.5);
+                scene.add(door);
+                objects.push(door);
+                
+                loadedChunks[chunkKey].push({ x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, materialType: 'door' });
+            } else {
+                const newBlock = new THREE.Mesh(blockGeometry, materials[currentMaterialKey]);
+                newBlock.position.copy(spawnPos);
+                newBlock.castShadow = true;
+                newBlock.receiveShadow = true;
+                newBlock.name = currentMaterialKey;
+
+                scene.add(newBlock);
+                objects.push(newBlock);
+                
+                loadedChunks[chunkKey].push({ x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, materialType: currentMaterialKey });
+            }
+        }
+
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+// A simple particle object structure
+class WaterParticle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    update(grid, gridWidth, gridHeight) {
+        // 1. Try to move straight down
+        if (this.y + 1 < gridHeight && grid[this.x][this.y + 1] === null) {
+            this.y++;
+        } 
+        // 2. Try to move diagonally down-left
+        else if (this.y + 1 < gridHeight && this.x - 1 >= 0 && grid[this.x - 1][this.y + 1] === null) {
+            this.x--;
+            this.y++;
+        } 
+        // 3. Try to move diagonally down-right
+        else if (this.y + 1 < gridHeight && this.x + 1 < gridWidth && grid[this.x + 1][this.y + 1] === null) {
+            this.x++;
+            this.y++;
+        } 
+        // 4. Try to spread out horizontally (sideways)
+        else {
+            let moveLeft = this.x - 1 >= 0 && grid[this.x - 1][this.y] === null;
+            let moveRight = this.x + 1 < gridWidth && grid[this.x + 1][this.y] === null;
+            
+            if (moveLeft && moveRight) {
+                // Pick a random side if both are open
+                this.x += Math.random() < 0.5 ? -1 : 1;
+            } else if (moveLeft) {
+                this.x--;
+            } else if (moveRight) {
+                this.x++;
+            }
+        }
+    }
+}
+
+// --- 10. FRAME ENGINE TRANSFORMATION RECURSIVE LOOP ---
+function animate() {
+    requestAnimationFrame(animate);
+
+    const delta = Math.min(clock.getDelta(), 0.1); 
+
+    if (!isInventoryOpen && !isCraftingOpen) {
+        const forwardVector = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        const sideVector = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+
+        forwardVector.y = 0;
+        forwardVector.normalize();
+        sideVector.y = 0;
+        sideVector.normalize();
+
+        let moveVector = new THREE.Vector3();
+        if (keys['w']) moveVector.addScaledVector(forwardVector, moveSpeed * delta);
+        if (keys['s']) moveVector.addScaledVector(forwardVector, -moveSpeed * delta);
+        if (keys['a']) moveVector.addScaledVector(sideVector, -moveSpeed * delta);
+        if (keys['d']) moveVector.addScaledVector(sideVector, moveSpeed * delta);
+
+        playerPhysics.velocity.y += playerPhysics.gravity * delta;
+
+        if (keys[' '] && playerPhysics.onGround) {
+            playerPhysics.velocity.y = playerPhysics.jumpForce;
+            playerPhysics.onGround = false;
+        }
+
+        let nextPosition = camera.position.clone();
+
+        nextPosition.x += moveVector.x;
+        if (checkCollision(nextPosition)) nextPosition.x -= moveVector.x; 
+
+        nextPosition.z += moveVector.z;
+        if (checkCollision(nextPosition)) nextPosition.z -= moveVector.z; 
+
+        nextPosition.y += playerPhysics.velocity.y * delta;
+        if (checkCollision(nextPosition)) {
+            if (playerPhysics.velocity.y < 0) playerPhysics.onGround = true;
+            nextPosition.y -= playerPhysics.velocity.y * delta;
+            playerPhysics.velocity.y = 0; 
+        } else {
+            playerPhysics.onGround = false;
+        }
+
+        camera.position.copy(nextPosition);
+        updateChunks();
+    }
+
+    playerCharacter.position.copy(camera.position).add(new THREE.Vector3(0, -1.2, 0));
+    playerCharacter.rotation.y = yaw;
+
+    renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+
+// This triggers when the user refreshes, closes the tab, or navigates away
+window.addEventListener('beforeunload', function (e) {
+    saveInfiniteWorld(); 
+});
+
+function saveInfiniteWorld() {
+    const dataToSave = {
+        chunks: loadedChunks, // Using your exact variable!
+        // If you track player position, you can add it here too
+    };
+
+    try {
+        localStorage.setItem('sandbox_infinite_save', JSON.stringify(dataToSave));
+        console.log("World saved successfully!");
+    } catch (error) {
+        console.error("Save failed!", error);
+    }
+}
+
+function loadInfiniteWorld() {
+    const rawData = localStorage.getItem('sandbox_infinite_save');
+    
+    if (rawData) {
+        const savedWorld = JSON.parse(rawData);
+        
+        // Clear current chunks and load the saved ones
+        for (let key in loadedChunks) delete loadedChunks[key];
+        Object.assign(loadedChunks, savedWorld.chunks);
+        
+        console.log("World loaded from memory!");
+    } else {
+        console.log("No save found. Generating a brand new world!");
+        // Put your default world generator function call here if you have one
+    }
+}
+
+// Run the loader as soon as the page is ready
+window.addEventListener('DOMContentLoaded', loadInfiniteWorld);
+
+// Trigger the save whenever they close or refresh the tab
+window.addEventListener('pagehide', saveInfiniteWorld);
+
+// Run this function manually in your console (F12) to force a save right now!
+function forceSave() {
+    const dataToSave = { chunks: loadedChunks };
+    localStorage.setItem('sandbox_infinite_save', JSON.stringify(dataToSave));
+    console.log("Forced save check: ", localStorage.getItem('sandbox_infinite_save'));
+}
+
+// 60000 milliseconds = 1 minute
+setInterval(function() {
+    saveInfiniteWorld();
+    console.log("Background autosave completed.");
+}, 60000);
+</script><canvas width="957" height="945" style="display: block; width: 957px; height: 945px;"></canvas><div id="crafting-menu" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 20, 10, 0.95); padding: 20px; border-radius: 12px; color: white; width: 280px; box-shadow: rgba(0, 0, 0, 0.8) 0px 0px 20px; border: 3px solid rgb(101, 67, 33); display: none; z-index: 101; font-family: monospace; text-align: center;">
+    <h3 style="color: #ffaa00; margin-top: 0;">🛠️ Crafting Table</h3>
+    <p style="font-size: 12px;">Select a recipe to craft:</p>
+    <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+        <div style="background: #3e2723; padding: 10px; border: 1px solid #5d4037; border-radius: 4px; cursor: pointer;" onclick="alert('Crafted 4x Wood Planks!')">🪵 1x Log ➔ 4x Planks</div>
+        <div style="background: #3e2723; padding: 10px; border: 1px solid #5d4037; border-radius: 4px; cursor: pointer;" onclick="alert('Crafted 1x Stone Pickaxe!')">⛏️ Stone Pickaxe</div>
+    </div>
+    <button style="margin-top: 15px; background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;" onclick="closeCrafting()">Close</button>
+</div>
+
+</body>
+</html>

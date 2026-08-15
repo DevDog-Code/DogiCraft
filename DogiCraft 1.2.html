@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DogiCraft Multiplayer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Courier New', Courier, monospace;
+      background: #000;
+    }
+
+    /* --- MAIN MENU UI --- */
+    #main-menu {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 100;
+      background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), 
+                  radial-gradient(circle, #3a506b 0%, #0b132b 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .title-logo {
+      font-size: 52px;
+      font-weight: 900;
+      color: #ddd;
+      text-shadow: 4px 4px 0px #111, -2px -2px 0px #555;
+      letter-spacing: 4px;
+      margin-bottom: 40px;
+      background: #444;
+      padding: 10px 30px;
+      border: 4px solid #222;
+      box-shadow: inset -4px -4px 0px #111, inset 4px 4px 0px #777;
+    }
+
+    .mc-button {
+      width: 320px;
+      height: 50px;
+      margin: 8px 0;
+      background: #737373;
+      border: 3px solid #000;
+      color: #fff;
+      font-size: 18px;
+      font-weight: bold;
+      font-family: inherit;
+      cursor: pointer;
+      text-shadow: 2px 2px 0px #000;
+      box-shadow: inset -3px -3px 0px #373737, inset 3px 3px 0px #aaa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mc-button:hover {
+      background: #8c8c8c;
+    }
+
+    .mc-button:active {
+      box-shadow: inset 3px 3px 0px #373737, inset -3px -3px 0px #aaa;
+    }
+
+    /* --- WORLD SELECTION MODAL --- */
+    #world-menu {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 101;
+      background: rgba(0, 0, 0, 0.85);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .world-list {
+      width: 400px;
+      max-height: 250px;
+      background: #111;
+      border: 2px solid #555;
+      margin: 20px 0;
+      overflow-y: auto;
+    }
+
+    .world-item {
+      padding: 15px;
+      border-bottom: 1px solid #333;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .world-item:hover, .world-item.selected {
+      background: #333;
+    }
+
+    /* --- IN-GAME HUD --- */
+    #game-hud {
+      display: none;
+    }
+
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 28px;
+      pointer-events: none;
+      text-shadow: 1px 1px 2px black;
+      z-index: 10;
+    }
+
+    #health-bar {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      z-index: 10;
+    }
+
+    .heart {
+      width: 20px;
+      height: 20px;
+      background: red;
+      clip-path: polygon(50% 15%, 80% 0%, 100% 35%, 100% 70%, 50% 100%, 0% 70%, 0% 35%, 20% 0%);
+    }
+
+    .heart.empty {
+      background: #333;
+    }
+
+    #hotbar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 6px;
+      border-radius: 4px;
+      border: 2px solid #333;
+      z-index: 10;
+    }
+
+    .slot {
+      width: 50px;
+      height: 50px;
+      background: #222;
+      border: 3px solid #555;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .slot.active {
+      border-color: white;
+      background: #444;
+    }
+
+    #pause-screen, #game-over {
+      display: none;
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 20;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    #game-over {
+      background: rgba(150, 0, 0, 0.7);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="main-menu">
+    <div class="title-logo">DogiCraft</div>
+    <button class="mc-button" id="btn-play">Play Game</button>
+    <button class="mc-button" onclick="alert('Controls:\nWASD = Move\nSPACE = Jump\nLEFT CLICK = Break Block\nRIGHT CLICK = Place Block\n1-4 / SCROLL = Change Block\nESC = Menu')">Controls</button>
+  </div>
+
+  <div id="world-menu">
+    <h2>Select World</h2>
+    <div class="world-list">
+      <div class="world-item selected" id="world-1">
+        <div>
+          <strong>New World</strong><br>
+          <small style="color: #aaa;">Survival Mode</small>
+        </div>
+      </div>
+    </div>
+    <button class="mc-button" id="btn-launch-world">Play Selected World</button>
+    <button class="mc-button" id="btn-cancel-world" style="margin-top: 15px;">Back</button>
+  </div>
+
+  <div id="game-hud">
+    <div id="crosshair">+</div>
+    
+    <div id="health-bar">
+      <div class="heart"></div><div class="heart"></div><div class="heart"></div>
+      <div class="heart"></div><div class="heart"></div><div class="heart"></div>
+      <div class="heart"></div><div class="heart"></div><div class="heart"></div>
+      <div class="heart"></div>
+    </div>
+
+    <div id="hotbar">
+      <div class="slot active">Grass</div>
+      <div class="slot">Dirt</div>
+      <div class="slot">Stone</div>
+      <div class="slot">Wood</div>
+    </div>
+  </div>
+
+  <div id="pause-screen">
+    <h2>Game Paused</h2>
+    <button class="mc-button" id="btn-resume" style="margin-top: 20px;">Back to Game</button>
+    <button class="mc-button" id="btn-quit">Save and Quit to Title</button>
+  </div>
+
+  <div id="game-over">
+    <h1>YOU DIED!</h1>
+    <button class="mc-button" id="btn-respawn" style="margin-top: 20px;">Respawn</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+
+  <script>
+    // --- UI NAVIGATION LOGIC ---
+    const mainMenu = document.getElementById('main-menu');
+    const worldMenu = document.getElementById('world-menu');
+    const gameHud = document.getElementById('game-hud');
+    const pauseScreen = document.getElementById('pause-screen');
+    const gameOverScreen = document.getElementById('game-over');
+
+    document.getElementById('btn-play').addEventListener('click', () => {
+      mainMenu.style.display = 'none';
+      worldMenu.style.display = 'flex';
+    });
+
+    document.getElementById('btn-cancel-world').addEventListener('click', () => {
+      worldMenu.style.display = 'none';
+      mainMenu.style.display = 'flex';
+    });
+
+    document.getElementById('btn-launch-world').addEventListener('click', () => {
+      worldMenu.style.display = 'none';
+      gameHud.style.display = 'block';
+      initGame();
+      controls.lock();
+    });
+
+    document.getElementById('btn-resume').addEventListener('click', () => {
+      controls.lock();
+    });
+
+    document.getElementById('btn-quit').addEventListener('click', () => {
+      pauseScreen.style.display = 'none';
+      gameHud.style.display = 'none';
+      mainMenu.style.display = 'flex';
+      gameStarted = false;
+    });
+
+    document.getElementById('btn-respawn').addEventListener('click', () => {
+      respawn();
+    });
+
+    // --- 3D ENGINE & GAME LOGIC ---
+    let scene, camera, renderer, controls;
+    let blocks = [], chunks = new Map();
+    let gameStarted = false;
+    const simplex = new SimplexNoise();
+    const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const CHUNK_SIZE = 12, RENDER_DISTANCE = 2, waterLevel = 2;
+
+    // Audio Context
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(freq, duration = 0.1, type = 'triangle') {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      const now = audioCtx.currentTime;
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(20, now + duration);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+      
+      osc.start(now);
+      osc.stop(now + duration);
+    }
+
+    // Textures
+    function makeTexture(type) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16; canvas.height = 16;
+      const ctx = canvas.getContext('2d');
+
+      const palette = {
+        grassTop: '#5b8731', grassSide: '#79553a', dirt: '#573d26',
+        stone: '#737373', wood: '#61432b', leaves: '#2e591b'
+      };
+
+      ctx.fillStyle = palette[type] || '#ffffff';
+      ctx.fillRect(0, 0, 16, 16);
+
+      for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+          if (Math.random() > 0.6) {
+            ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
+            ctx.fillRect(x, y, 1, 1);
+          }
+        }
+      }
+
+      if (type === 'grassSide') {
+        ctx.fillStyle = palette.grassTop;
+        ctx.fillRect(0, 0, 16, 4);
+        for (let x = 0; x < 16; x += 2) {
+          if (Math.random() > 0.3) ctx.fillRect(x, 4, 1, Math.floor(Math.random() * 3) + 1);
+        }
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      return texture;
+    }
+
+    const matGrass = [
+      new THREE.MeshLambertMaterial({ map: makeTexture('grassSide') }),
+      new THREE.MeshLambertMaterial({ map: makeTexture('grassSide') }),
+      new THREE.MeshLambertMaterial({ map: makeTexture('grassTop') }),
+      new THREE.MeshLambertMaterial({ map: makeTexture('dirt') }),
+      new THREE.MeshLambertMaterial({ map: makeTexture('grassSide') }),
+      new THREE.MeshLambertMaterial({ map: makeTexture('grassSide') })
+    ];
+    const matDirt = new THREE.MeshLambertMaterial({ map: makeTexture('dirt') });
+    const matStone = new THREE.MeshLambertMaterial({ map: makeTexture('stone') });
+    const matWood = new THREE.MeshLambertMaterial({ map: makeTexture('wood') });
+    const matLeaves = new THREE.MeshLambertMaterial({ map: makeTexture('leaves'), transparent: true, opacity: 0.9 });
+    const matWater = new THREE.MeshLambertMaterial({ color: 0x3366cc, transparent: true, opacity: 0.6 });
+
+    const blockTypes = [
+      { name: 'grass', mat: matGrass, soundFreq: 120 },
+      { name: 'dirt', mat: matDirt, soundFreq: 100 },
+      { name: 'stone', mat: matStone, soundFreq: 60 },
+      { name: 'wood', mat: matWood, soundFreq: 150 }
+    ];
+    let activeSlot = 0;
+
+    function initGame() {
+      if (gameStarted) return;
+      gameStarted = true;
+
+      // Reset Collections
+      blocks = [];
+      chunks.clear();
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x78a7ff);
+      scene.fog = new THREE.FogExp2(0x78a7ff, 0.012);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer({ antialias: false });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      // Remove existing canvas if any
+      const existingCanvas = document.querySelector('canvas');
+      if (existingCanvas) existingCanvas.remove();
+      document.body.appendChild(renderer.domElement);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+      const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      sunLight.position.set(50, 100, 50);
+      scene.add(sunLight);
+
+      controls = new THREE.PointerLockControls(camera, document.body);
+
+      controls.addEventListener('lock', () => {
+        pauseScreen.style.display = 'none';
+      });
+
+      controls.addEventListener('unlock', () => {
+        if (gameStarted && !isDead) {
+          pauseScreen.style.display = 'flex';
+        }
+      });
+
+      camera.position.set(0, 15, 0);
+      health = 10;
+      isDead = false;
+      updateHealthUI();
+
+      animate();
+    }
+
+    // Terrain & Chunk Generation
+    function generateChunk(cx, cz) {
+      const chunkBlocks = [];
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        for (let z = 0; z < CHUNK_SIZE; z++) {
+          const worldX = cx * CHUNK_SIZE + x;
+          const worldZ = cz * CHUNK_SIZE + z;
+          const height = Math.floor(simplex.noise2D(worldX * 0.03, worldZ * 0.03) * 6) + 4;
+
+          for (let y = 0; y <= height; y++) {
+            let mat = matStone;
+            let freq = 60;
+
+            if (y === height) {
+              mat = (y <= waterLevel) ? matDirt : matGrass;
+              freq = 120;
+            } else if (y > height - 3) {
+              mat = matDirt;
+              freq = 100;
+            }
+
+            const cube = new THREE.Mesh(blockGeometry, mat);
+            cube.position.set(worldX, y, worldZ);
+            cube.userData = { freq };
+            scene.add(cube);
+            blocks.push(cube);
+            chunkBlocks.push(cube);
+
+            if (y === height && y > waterLevel + 1 && Math.random() < 0.015) {
+              buildTree(worldX, y + 1, worldZ, chunkBlocks);
+            }
+          }
+
+          if (height < waterLevel) {
+            for (let wy = height + 1; wy <= waterLevel; wy++) {
+              const water = new THREE.Mesh(blockGeometry, matWater);
+              water.position.set(worldX, wy, worldZ);
+              scene.add(water);
+              chunkBlocks.push(water);
+            }
+          }
+        }
+      }
+      chunks.set(`${cx},${cz}`, chunkBlocks);
+    }
+
+    function buildTree(tx, ty, tz, chunkBlocks) {
+      const height = 4 + Math.floor(Math.random() * 2);
+      for (let y = 0; y < height; y++) {
+        const log = new THREE.Mesh(blockGeometry, matWood);
+        log.position.set(tx, ty + y, tz);
+        log.userData = { freq: 150 };
+        scene.add(log);
+        blocks.push(log);
+        chunkBlocks.push(log);
+      }
+      for (let lx = -2; lx <= 2; lx++) {
+        for (let lz = -2; lz <= 2; lz++) {
+          for (let ly = -2; ly <= 1; ly++) {
+            if (Math.abs(lx) === 2 && Math.abs(lz) === 2) continue;
+            const leaf = new THREE.Mesh(blockGeometry, matLeaves);
+            leaf.position.set(tx + lx, ty + height + ly, tz + lz);
+            leaf.userData = { freq: 200 };
+            scene.add(leaf);
+            blocks.push(leaf);
+            chunkBlocks.push(leaf);
+          }
+        }
+      }
+    }
+
+    function updateChunks() {
+      const playerCX = Math.floor(camera.position.x / CHUNK_SIZE);
+      const playerCZ = Math.floor(camera.position.z / CHUNK_SIZE);
+
+      for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
+        for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
+          const key = `${playerCX + x},${playerCZ + z}`;
+          if (!chunks.has(key)) generateChunk(playerCX + x, playerCZ + z);
+        }
+      }
+    }
+
+    // Health System
+    let health = 10, isDead = false;
+    function updateHealthUI() {
+      const hearts = document.querySelectorAll('.heart');
+      hearts.forEach((h, idx) => {
+        if (idx < health) h.classList.remove('empty');
+        else h.classList.add('empty');
+      });
+    }
+
+    function takeDamage(amount) {
+      if (isDead) return;
+      health = Math.max(0, health - amount);
+      updateHealthUI();
+      playSound(80, 0.25, 'sawtooth');
+
+      if (health === 0) {
+        isDead = true;
+        controls.unlock();
+        gameOverScreen.style.display = 'flex';
+      }
+    }
+
+    function respawn() {
+      health = 10;
+      isDead = false;
+      updateHealthUI();
+      gameOverScreen.style.display = 'none';
+      camera.position.set(0, 20, 0);
+      velocityY = 0;
+      controls.lock();
+    }
+
+    // Physics & Inputs
+    let velocityY = 0, canJump = false;
+    const gravity = -0.012, playerHeight = 1.6;
+    let highestFallY = 0;
+    const keys = { W: false, A: false, S: false, D: false };
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyW') keys.W = true;
+      if (e.code === 'KeyS') keys.S = true;
+      if (e.code === 'KeyA') keys.A = true;
+      if (e.code === 'KeyD') keys.D = true;
+      if (e.code === 'Space' && canJump && !isDead && gameStarted) {
+        velocityY = 0.22;
+        canJump = false;
+        highestFallY = camera.position.y;
+      }
+
+      if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
+        selectSlot(parseInt(e.code.replace('Digit', '')) - 1);
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyW') keys.W = false;
+      if (e.code === 'KeyS') keys.S = false;
+      if (e.code === 'KeyA') keys.A = false;
+      if (e.code === 'KeyD') keys.D = false;
+    });
+
+    window.addEventListener('wheel', (e) => {
+      if (!gameStarted) return;
+      if (e.deltaY > 0) selectSlot((activeSlot + 1) % blockTypes.length);
+      else selectSlot((activeSlot - 1 + blockTypes.length) % blockTypes.length);
+    });
+
+    function selectSlot(i) {
+      activeSlot = i;
+      const slots = document.querySelectorAll('.slot');
+      slots.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    }
+
+    // Raycasting for Mining/Placing
+    const raycaster = new THREE.Raycaster();
+    window.addEventListener('mousedown', (e) => {
+      if (!controls || !controls.isLocked || isDead) return;
+
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const intersects = raycaster.intersectObjects(blocks);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        if (hit.distance > 6) return;
+
+        if (e.button === 0) { // Mine
+          playSound(hit.object.userData.freq || 100);
+          scene.remove(hit.object);
+          blocks.splice(blocks.indexOf(hit.object), 1);
+        } else if (e.button === 2) { // Place
+          const selected = blockTypes[activeSlot];
+          const newBlock = new THREE.Mesh(blockGeometry, selected.mat);
+          newBlock.position.copy(hit.object.position).add(hit.face.normal);
+          newBlock.userData = { freq: selected.soundFreq };
+
+          scene.add(newBlock);
+          blocks.push(newBlock);
+          playSound(selected.soundFreq + 50);
+        }
+      }
+    });
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Main Game Loop
+    function animate() {
+      if (!gameStarted) return;
+      requestAnimationFrame(animate);
+
+      if (controls.isLocked && !isDead) {
+        const speed = 0.08;
+        if (keys.W) controls.moveForward(speed);
+        if (keys.S) controls.moveForward(-speed);
+        if (keys.A) controls.moveRight(-speed);
+        if (keys.D) controls.moveRight(speed);
+
+        updateChunks();
+
+        velocityY += gravity;
+        camera.position.y += velocityY;
+
+        if (velocityY > 0) highestFallY = camera.position.y;
+
+        const downRay = new THREE.Raycaster(camera.position, new THREE.Vector3(0, -1, 0), 0, playerHeight);
+        const groundHits = downRay.intersectObjects(blocks);
+
+        if (groundHits.length > 0) {
+          const fallDistance = highestFallY - camera.position.y;
+          if (fallDistance > 4) {
+            takeDamage(Math.floor((fallDistance - 3) / 1.5));
+          }
+
+          camera.position.y = groundHits[0].point.y + playerHeight;
+          velocityY = 0;
+          canJump = true;
+          highestFallY = camera.position.y;
+        }
+
+        if (camera.position.y < -30) takeDamage(10);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DogiCraft 3.1 - Fixed World Creation</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Courier New', Courier, monospace; background: #000; }
+
+        /* --- UI OVERLAYS & MENUS --- */
+        .menu-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100;
+            background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.7)), radial-gradient(circle, #3a506b 0%, #0b132b 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;
+        }
+
+        .title-logo {
+            font-size: 48px; font-weight: 900; color: #ddd; text-shadow: 4px 4px 0px #111;
+            letter-spacing: 3px; margin-bottom: 25px; background: #333; padding: 10px 25px;
+            border: 4px solid #111; box-shadow: inset -4px -4px 0px #111, inset 4px 4px 0px #666;
+        }
+
+        .mc-button {
+            width: 320px; height: 46px; margin: 6px 0; background: #555; border: 3px solid #000;
+            color: #fff; font-size: 15px; font-weight: bold; font-family: inherit; cursor: pointer;
+            text-shadow: 2px 2px 0px #000; box-shadow: inset -3px -3px 0px #222, inset 3px 3px 0px #888;
+            display: flex; align-items: center; justify-content: center; border-radius: 2px;
+        }
+        .mc-button:hover { background: #666; }
+        .mc-button:active { box-shadow: inset 3px 3px 0px #222, inset -3px -3px 0px #888; }
+        .mc-button.btn-green { background: #27ae60; border-color: #1e8449; }
+        .mc-button.btn-green:hover { background: #2ecc71; }
+
+        .mc-input {
+            width: 320px; padding: 12px; margin: 8px 0; background: #111; border: 2px solid #555;
+            color: #00ff88; font-family: inherit; text-align: center; border-radius: 2px; font-size: 14px;
+        }
+
+        .world-list { width: 360px; max-height: 220px; background: #111; border: 2px solid #444; margin: 15px 0; overflow-y: auto; }
+        .world-item { padding: 12px; border-bottom: 1px solid #333; cursor: pointer; display: flex; justify-content: space-between; align-items: center; text-align: left; }
+        .world-item:hover, .world-item.selected { background: #222; border-left: 4px solid #00ff88; }
+
+        /* CREATION MODAL OVERLAY */
+        #create-modal {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 150; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        /* --- IN-GAME HUD --- */
+        #game-hud { display: none; }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 14px; height: 14px; pointer-events: none; border: 2px solid rgba(255, 255, 255, 0.9);
+            border-radius: 50%; mix-blend-mode: difference; z-index: 10;
+        }
+
+        #health-bar { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; z-index: 10; }
+        .heart { width: 18px; height: 18px; background: red; clip-path: polygon(50% 15%, 80% 0%, 100% 35%, 100% 70%, 50% 100%, 0% 70%, 0% 35%, 20% 0%); }
+        .heart.empty { background: #333; }
+
+        #hotbar {
+            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 6px; background: rgba(0, 0, 0, 0.65); padding: 6px;
+            border-radius: 6px; border: 2px solid #444; z-index: 10;
+        }
+        .slot {
+            width: 44px; height: 44px; background: rgba(40, 40, 40, 0.8); border: 2px solid #333;
+            color: white; display: flex; align-items: center; justify-content: center; font-size: 20px;
+            cursor: pointer; border-radius: 4px;
+        }
+        .slot.active { border-color: #00ff88; background: rgba(80, 80, 80, 0.9); }
+
+        #server-info {
+            position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.75); color: #00ff88;
+            padding: 8px 14px; border-radius: 4px; border: 1px solid #00ff88; font-size: 12px; z-index: 10;
+        }
+
+        /* --- INVENTORY MODAL --- */
+        #inventory-menu {
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(20, 20, 20, 0.95); padding: 20px; border-radius: 8px; color: white;
+            width: 320px; box-shadow: 0 0 20px rgba(0,0,0,0.8); border: 2px solid #444; z-index: 200;
+        }
+        #item-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 220px; overflow-y: auto; margin-top: 10px; }
+        .grid-item { background: #2a2a2a; padding: 8px; border: 1px solid #444; border-radius: 4px; cursor: pointer; text-align: center; font-size: 12px; }
+        .grid-item:hover { background: #00ff88; color: black; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+    <div id="main-menu" class="menu-screen">
+        <div class="title-logo">DogiCraft 3.1</div>
+        <button class="mc-button btn-green" onclick="openWorldMenu()">Select / Create World</button>
+        <button class="mc-button" onclick="openJoinMenu()">Join Multiplayer Server</button>
+        <button class="mc-button" onclick="alert('Controls:\nWASD = Move\nSPACE = Jump\nE = Open Inventory\n1-5 = Hotbar Selection\nLEFT CLICK = Break Block\nRIGHT CLICK = Place Block\nESC = Pause / Options')">Controls</button>
+    </div>
+
+    <div id="world-menu" class="menu-screen" style="display: none;">
+        <h2>World Manager</h2>
+        <div class="world-list" id="world-list-container"></div>
+        <button class="mc-button btn-green" onclick="openCreateModal()">+ Create New World</button>
+        <button class="mc-button" onclick="hostAndPlaySelectedWorld()">Play & Host Selected World</button>
+        <button class="mc-button" onclick="deleteSelectedWorld()" style="background: #900;">Delete World</button>
+        <button class="mc-button" onclick="backToMain()">Back to Main Menu</button>
+    </div>
+
+    <div id="create-modal">
+        <h2>Create New World</h2>
+        <input type="text" id="new-world-name" class="mc-input" placeholder="Enter World Name..." value="My Survival World">
+        <button class="mc-button btn-green" onclick="submitCreateWorld()">Create & Save World</button>
+        <button class="mc-button" onclick="closeCreateModal()">Cancel</button>
+    </div>
+
+    <div id="join-menu" class="menu-screen" style="display: none;">
+        <h2>Join Multiplayer Server</h2>
+        <p style="font-size: 12px; color: #aaa; margin: 5px 0;">Enter the Host's World Server ID below:</p>
+        <input type="text" id="join-server-id" class="mc-input" placeholder="e.g. dogicraft-world-xxxxxx">
+        <button class="mc-button btn-green" onclick="connectToHost()">Connect & Join World</button>
+        <div id="mp-status" style="color: #ffaa00; font-size: 12px; margin: 8px 0;"></div>
+        <button class="mc-button" onclick="backToMain()">Back</button>
+    </div>
+
+    <div id="game-hud">
+        <div id="crosshair"></div>
+        <div id="server-info">Server ID: <span id="current-server-id">---</span></div>
+        <div id="health-bar">
+            <div class="heart"></div><div class="heart"></div><div class="heart"></div><div class="heart"></div><div class="heart"></div>
+            <div class="heart"></div><div class="heart"></div><div class="heart"></div><div class="heart"></div><div class="heart"></div>
+        </div>
+        <div id="hotbar">
+            <div class="slot active" data-block="grass">🟩</div>
+            <div class="slot" data-block="dirt">🟫</div>
+            <div class="slot" data-block="stone">🪨</div>
+            <div class="slot" data-block="wood">🪵</div>
+            <div class="slot" data-block="glass">𔔲</div>
+        </div>
+    </div>
+
+    <div id="pause-screen" class="menu-screen" style="display: none;">
+        <h2>Game Paused</h2>
+        <button class="mc-button btn-green" onclick="resumeGame()">Resume Game</button>
+        <button class="mc-button" onclick="copyServerID()">Copy World Server ID</button>
+        <button class="mc-button" onclick="saveCurrentWorld()">Save World</button>
+        <button class="mc-button" onclick="quitToTitle()">Save & Exit to Menu</button>
+    </div>
+
+    <div id="game-over" class="menu-screen" style="display: none; background: rgba(150, 0, 0, 0.85);">
+        <h1>YOU DIED!</h1>
+        <button class="mc-button" onclick="respawnPlayer()">Respawn</button>
+    </div>
+
+    <div id="inventory-menu">
+        <h3 style="text-align: center; color: #00ff88; margin-bottom: 8px;">🎒 Select Block</h3>
+        <div id="item-grid">
+            <div class="grid-item" data-block="grass">Grass 🟩</div>
+            <div class="grid-item" data-block="dirt">Dirt 🟫</div>
+            <div class="grid-item" data-block="stone">Stone 🪨</div>
+            <div class="grid-item" data-block="wood">Wood 🪵</div>
+            <div class="grid-item" data-block="sand">Sand 🟨</div>
+            <div class="grid-item" data-block="glass">Glass 𔔲</div>
+            <div class="grid-item" data-block="crafting_table">Crafting Table 🛠️</div>
+            <div class="grid-item" data-block="door">Door 🚪</div>
+            <div class="grid-item" data-block="obsidian">Obsidian 🔮</div>
+            <div class="grid-item" data-block="glowstone">Glowstone 💡</div>
+            <div class="grid-item" data-block="water">Water 🟦</div>
+        </div>
+    </div>
+
+    <script>
+        // --- STORAGE & GLOBAL STATE ---
+        let worlds = JSON.parse(localStorage.getItem('dogicraft_worlds_v3') || '{}');
+        let selectedWorldId = null;
+        let activeWorldData = null;
+
+        let peer = null, connections = [], isHost = false, myPeerId = null;
+        let gameStarted = false, isInventoryOpen = false;
+        let activeSlotIndex = 0;
+
+        const blockEmojis = {
+            grass: '🟩', dirt: '🟫', stone: '🪨', wood: '🪵', sand: '🟨',
+            glass: '𔔲', crafting_table: '🛠️', door: '🚪', obsidian: '🔮',
+            glowstone: '💡', water: '🟦'
+        };
+
+        // --- AUDIO SYNTHESIS ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBlockSound(freq = 120, duration = 0.08) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+
+        // --- WORLD & MENU NAVIGATION ---
+        function openWorldMenu() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('world-menu').style.display = 'flex';
+            renderWorldList();
+        }
+
+        function openJoinMenu() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('join-menu').style.display = 'flex';
+        }
+
+        function backToMain() {
+            document.getElementById('world-menu').style.display = 'none';
+            document.getElementById('join-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+        }
+
+        function renderWorldList() {
+            const container = document.getElementById('world-list-container');
+            container.innerHTML = '';
+            const keys = Object.keys(worlds);
+
+            if (keys.length === 0) {
+                container.innerHTML = '<div style="padding: 15px; text-align: center; color: #888;">No worlds saved. Create one below!</div>';
+                return;
+            }
+
+            keys.forEach(id => {
+                const w = worlds[id];
+                const item = document.createElement('div');
+                item.className = `world-item ${selectedWorldId === id ? 'selected' : ''}`;
+                item.innerHTML = `<div><strong>${w.name}</strong><br><small style="color:#00ff88;">Server ID: ${w.id}</small></div>`;
+                item.onclick = () => {
+                    selectedWorldId = id;
+                    renderWorldList();
+                };
+                container.appendChild(item);
+            });
+        }
+
+        function openCreateModal() {
+            document.getElementById('create-modal').style.display = 'flex';
+        }
+
+        function closeCreateModal() {
+            document.getElementById('create-modal').style.display = 'none';
+        }
+
+        function submitCreateWorld() {
+            const input = document.getElementById('new-world-name');
+            const name = input.value.trim() || "New World";
+
+            // Generate Unique Server ID per world
+            const uniqueServerId = 'dogicraft-world-' + Math.random().toString(36).substring(2, 8);
+            worlds[uniqueServerId] = {
+                id: uniqueServerId,
+                name: name,
+                modifications: {}
+            };
+
+            localStorage.setItem('dogicraft_worlds_v3', JSON.stringify(worlds));
+            selectedWorldId = uniqueServerId;
+            closeCreateModal();
+            renderWorldList();
+        }
+
+        function deleteSelectedWorld() {
+            if (!selectedWorldId || !worlds[selectedWorldId]) return alert("Please select a world to delete.");
+            if (confirm(`Are you sure you want to delete "${worlds[selectedWorldId].name}"?`)) {
+                delete worlds[selectedWorldId];
+                localStorage.setItem('dogicraft_worlds_v3', JSON.stringify(worlds));
+                selectedWorldId = null;
+                renderWorldList();
+            }
+        }
+
+        function hostAndPlaySelectedWorld() {
+            if (!selectedWorldId || !worlds[selectedWorldId]) return alert("Select or create a world first!");
+            activeWorldData = worlds[selectedWorldId];
+            isHost = true;
+
+            initNetworking(activeWorldData.id, () => {
+                startEngine();
+            });
+        }
+
+        function connectToHost() {
+            const serverId = document.getElementById('join-server-id').value.trim();
+            if (!serverId) return alert("Please enter a valid Server ID!");
+            document.getElementById('mp-status').textContent = "Connecting to Host Server ID...";
+
+            isHost = false;
+            initNetworking(null, () => {
+                const conn = peer.connect(serverId);
+                setupConnection(conn);
+                conn.on('open', () => {
+                    activeWorldData = { id: serverId, modifications: {} };
+                    startEngine();
+                });
+            });
+        }
+
+        function copyServerID() {
+            if (activeWorldData) {
+                navigator.clipboard.writeText(activeWorldData.id);
+                alert("Copied Server ID to clipboard: " + activeWorldData.id);
+            }
+        }
+
+        // --- NETWORKING (PEERJS) ---
+        function initNetworking(customServerId, callback) {
+            peer = customServerId ? new Peer(customServerId) : new Peer();
+            peer.on('open', (id) => {
+                myPeerId = id;
+                document.getElementById('current-server-id').textContent = id;
+                if (callback) callback(id);
+            });
+
+            peer.on('connection', setupConnection);
+
+            peer.on('error', (err) => {
+                if (err.type === 'unavailable-id') {
+                    const altId = customServerId + '-' + Math.floor(Math.random() * 100);
+                    initNetworking(altId, callback);
+                } else {
+                    const status = document.getElementById('mp-status');
+                    if (status) status.textContent = "Network Error: " + err.type;
+                }
+            });
+        }
+
+        function setupConnection(conn) {
+            connections.push(conn);
+            conn.on('open', () => {
+                if (isHost && activeWorldData) {
+                    conn.send({ type: 'syncWorld', modifications: activeWorldData.modifications });
+                }
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'syncWorld') {
+                    Object.assign(activeWorldData.modifications, data.modifications);
+                    updateChunks(true);
+                } else if (data.type === 'blockEdit') {
+                    activeWorldData.modifications[data.key] = data.blockType;
+                    rebuildBlockAt(data.key, data.blockType);
+                    if (isHost) broadcastData(data, conn);
+                }
+            });
+        }
+
+        function broadcastData(data, excludeConn = null) {
+            connections.forEach(c => { if (c !== excludeConn && c.open) c.send(data); });
+        }
+
+        // --- 3D ENGINE & SCENE SETUP ---
+        let scene, camera, renderer, controls;
+        let objects = [], loadedChunks = new Map();
+        const simplex = new SimplexNoise();
+        const blockSize = 1, chunkSize = 10, renderDistance = 2;
+
+        const blockGeometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+        const materials = {
+            grass: new THREE.MeshLambertMaterial({ color: 0x4caf50 }),
+            dirt: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
+            stone: new THREE.MeshLambertMaterial({ color: 0x808080 }),
+            wood: new THREE.MeshLambertMaterial({ color: 0x5c4033 }),
+            sand: new THREE.MeshLambertMaterial({ color: 0xecd9b0 }),
+            glass: new THREE.MeshLambertMaterial({ color: 0xadd8e6, transparent: true, opacity: 0.6 }),
+            crafting_table: new THREE.MeshLambertMaterial({ color: 0xd2b48c }),
+            door: new THREE.MeshLambertMaterial({ color: 0xa0522d }),
+            obsidian: new THREE.MeshLambertMaterial({ color: 0x3b1e54 }),
+            glowstone: new THREE.MeshLambertMaterial({ color: 0xffe169 }),
+            water: new THREE.MeshLambertMaterial({ color: 0x2980b9, transparent: true, opacity: 0.7 })
+        };
+
+        function startEngine() {
+            document.getElementById('world-menu').style.display = 'none';
+            document.getElementById('join-menu').style.display = 'none';
+            document.getElementById('game-hud').style.display = 'block';
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x78a7ff);
+            scene.fog = new THREE.FogExp2(0x78a7ff, 0.02);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            const existingCanvas = document.querySelector('canvas');
+            if (existingCanvas) existingCanvas.remove();
+            document.body.appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(40, 60, 20);
+            scene.add(dirLight);
+
+            controls = new THREE.PointerLockControls(camera, document.body);
+            controls.addEventListener('unlock', () => {
+                if (gameStarted && !isDead && !isInventoryOpen) {
+                    document.getElementById('pause-screen').style.display = 'flex';
+                }
+            });
+
+            camera.position.set(0, 12, 0);
+            gameStarted = true; health = 10; isDead = false;
+            updateHealthUI();
+
+            controls.lock();
+            animate();
+        }
+
+        // --- PROCEDURAL TERRAIN GENERATION ---
+        function generateHeight(x, z) {
+            return Math.floor(simplex.noise2D(x * 0.04, z * 0.04) * 4) + 3;
+        }
+
+        function updateChunks(force = false) {
+            const playerCX = Math.floor(camera.position.x / chunkSize);
+            const playerCZ = Math.floor(camera.position.z / chunkSize);
+
+            for (let cx = playerCX - renderDistance; cx <= playerCX + renderDistance; cx++) {
+                for (let cz = playerCZ - renderDistance; cz <= playerCZ + renderDistance; cz++) {
+                    const key = `${cx},${cz}`;
+                    if (!loadedChunks.has(key) || force) {
+                        buildChunk(cx, cz);
+                        loadedChunks.set(key, true);
+                    }
+                }
+            }
+        }
+
+        function buildChunk(cx, cz) {
+            const startX = cx * chunkSize;
+            const startZ = cz * chunkSize;
+
+            for (let x = 0; x < chunkSize; x++) {
+                for (let z = 0; z < chunkSize; z++) {
+                    const wx = startX + x;
+                    const wz = startZ + z;
+                    const height = generateHeight(wx, wz);
+
+                    for (let y = height - 2; y <= height; y++) {
+                        const blockKey = `${wx},${y},${wz}`;
+                        let type = activeWorldData.modifications[blockKey];
+
+                        if (type === undefined) {
+                            type = (y === height) ? 'grass' : ((y >= height - 2) ? 'dirt' : 'stone');
+                        }
+
+                        if (type !== 'air') {
+                            const mesh = new THREE.Mesh(blockGeometry, materials[type] || materials.grass);
+                            mesh.position.set(wx, y, wz);
+                            mesh.userData = { key: blockKey, type: type };
+                            scene.add(mesh);
+                            objects.push(mesh);
+                        }
+                    }
+                }
+            }
+        }
+
+        function rebuildBlockAt(key, type) {
+            const [x, y, z] = key.split(',').map(Number);
+            for (let i = objects.length - 1; i >= 0; i--) {
+                if (objects[i].position.x === x && objects[i].position.y === y && objects[i].position.z === z) {
+                    scene.remove(objects[i]);
+                    objects.splice(i, 1);
+                }
+            }
+
+            if (type !== 'air' && materials[type]) {
+                const mesh = new THREE.Mesh(blockGeometry, materials[type]);
+                mesh.position.set(x, y, z);
+                mesh.userData = { key: key, type: type };
+                scene.add(mesh);
+                objects.push(mesh);
+            }
+        }
+
+        // --- HEALTH & DAMAGE ---
+        let health = 10, isDead = false, highestFallY = 0;
+        function updateHealthUI() {
+            const hearts = document.querySelectorAll('.heart');
+            hearts.forEach((h, idx) => h.classList.toggle('empty', idx >= health));
+        }
+
+        function takeDamage(amount) {
+            if (isDead) return;
+            health = Math.max(0, health - amount);
+            updateHealthUI();
+            playBlockSound(60, 0.2);
+            if (health === 0) {
+                isDead = true;
+                controls.unlock();
+                document.getElementById('game-over').style.display = 'flex';
+            }
+        }
+
+        function respawnPlayer() {
+            health = 10; isDead = false;
+            updateHealthUI();
+            document.getElementById('game-over').style.display = 'none';
+            camera.position.set(0, 15, 0);
+            velocityY = 0;
+            controls.lock();
+        }
+
+        // --- PHYSICS & INPUTS ---
+        let velocityY = 0, canJump = false;
+        const gravity = -0.012, playerHeight = 1.6;
+        const keys = {};
+
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = true;
+
+            if (key === 'e' && gameStarted && !isDead) toggleInventoryMenu();
+            if (!isNaN(e.key) && parseInt(e.key) >= 1 && parseInt(e.key) <= 5) selectHotbarSlot(parseInt(e.key) - 1);
+            if (e.code === 'Space' && canJump && gameStarted && !isDead) {
+                velocityY = 0.22;
+                canJump = false;
+                highestFallY = camera.position.y;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+        function selectHotbarSlot(index) {
+            const slots = document.querySelectorAll('#hotbar .slot');
+            slots.forEach((s, idx) => s.classList.toggle('active', idx === index));
+            activeSlotIndex = index;
+        }
+
+        function toggleInventoryMenu() {
+            isInventoryOpen = !isInventoryOpen;
+            const menu = document.getElementById('inventory-menu');
+            if (isInventoryOpen) {
+                menu.style.display = 'block';
+                controls.unlock();
+            } else {
+                menu.style.display = 'none';
+                controls.lock();
+            }
+        }
+
+        document.querySelectorAll('.grid-item').forEach(item => {
+            item.onclick = () => {
+                const block = item.getAttribute('data-block');
+                const slot = document.querySelectorAll('#hotbar .slot')[activeSlotIndex];
+                slot.setAttribute('data-block', block);
+                slot.textContent = blockEmojis[block] || '📦';
+                toggleInventoryMenu();
+            };
+        });
+
+        // Mining & Placing
+        const raycaster = new THREE.Raycaster();
+        window.addEventListener('mousedown', (e) => {
+            if (!controls || !controls.isLocked || isDead || isInventoryOpen) return;
+
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(objects);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                if (hit.distance > 6) return;
+
+                if (e.button === 0) { // Mine
+                    const key = hit.object.userData.key;
+                    activeWorldData.modifications[key] = 'air';
+                    rebuildBlockAt(key, 'air');
+                    playBlockSound(140);
+                    broadcastData({ type: 'blockEdit', key: key, blockType: 'air' });
+                } else if (e.button === 2) { // Place
+                    const slot = document.querySelectorAll('#hotbar .slot')[activeSlotIndex];
+                    const blockToPlace = slot.getAttribute('data-block');
+
+                    if (blockToPlace) {
+                        const placePos = hit.object.position.clone().add(hit.face.normal);
+                        const key = `${placePos.x},${placePos.y},${placePos.z}`;
+                        activeWorldData.modifications[key] = blockToPlace;
+                        rebuildBlockAt(key, blockToPlace);
+                        playBlockSound(200);
+                        broadcastData({ type: 'blockEdit', key: key, blockType: blockToPlace });
+                    }
+                }
+            }
+        });
+        window.addEventListener('contextmenu', e => e.preventDefault());
+
+        // --- PAUSE & SAVE ---
+        function resumeGame() {
+            document.getElementById('pause-screen').style.display = 'none';
+            controls.lock();
+        }
+
+        function saveCurrentWorld() {
+            if (isHost && activeWorldData) {
+                worlds[activeWorldData.id] = activeWorldData;
+                localStorage.setItem('dogicraft_worlds_v3', JSON.stringify(worlds));
+                alert("💾 World saved successfully!");
+            }
+        }
+
+        function quitToTitle() {
+            saveCurrentWorld();
+            gameStarted = false;
+            document.getElementById('pause-screen').style.display = 'none';
+            document.getElementById('game-hud').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+        }
+
+        // --- ANIMATION LOOP ---
+        function animate() {
+            if (!gameStarted) return;
+            requestAnimationFrame(animate);
+
+            if (controls.isLocked && !isDead) {
+                const moveSpeed = 0.08;
+                if (keys['w']) controls.moveForward(moveSpeed);
+                if (keys['s']) controls.moveForward(-moveSpeed);
+                if (keys['a']) controls.moveRight(-moveSpeed);
+                if (keys['d']) controls.moveRight(moveSpeed);
+
+                updateChunks();
+
+                velocityY += gravity;
+                camera.position.y += velocityY;
+
+                if (velocityY > 0) highestFallY = camera.position.y;
+
+                const downRay = new THREE.Raycaster(camera.position, new THREE.Vector3(0, -1, 0), 0, playerHeight);
+                const groundHits = downRay.intersectObjects(objects);
+
+                if (groundHits.length > 0) {
+                    const fallDist = highestFallY - camera.position.y;
+                    if (fallDist > 4) takeDamage(Math.floor((fallDist - 3) / 1.5));
+
+                    camera.position.y = groundHits[0].point.y + playerHeight;
+                    velocityY = 0;
+                    canJump = true;
+                    highestFallY = camera.position.y;
+                }
+
+                if (camera.position.y < -30) takeDamage(10);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
